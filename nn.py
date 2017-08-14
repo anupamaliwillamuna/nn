@@ -36,16 +36,15 @@ class Neural(object):
         self.activationPrime = {}
         self.theta[0] = np.array([[np.random.randint(1,100)/100 for _ in range(ar[1])] for _ in range(ar[0])])
         for i in range(1,len(ar)-1):
-            theta_i = np.array([[np.random.randint(1,100)/100 for _ in range(ar[i+1])] for _ in range(ar[i]+1)])
-            self.theta[i] = theta_i
+            self.theta[i] = np.array([[np.random.randint(1,100)/100 for _ in range(ar[i+1])] for _ in range(ar[i]+1)])
 
-    def feed(self,X,Y):
+    def feed(self, X, Y):
         self.datasets = len(X)
         self.X = np.array(X).reshape(self.datasets,-1)
         self.Y = np.array(Y).reshape(self.datasets,-1)
 
-        self.X /= np.amax(self.X)
-        self.Y /= np.amax(self.Y)
+        self.X = self.X /np.amax(self.X)
+        self.Y = self.Y /np.amax(self.Y)
 
     def sigmoid(self,S):
         return 1/(1+np.exp(-S))
@@ -90,46 +89,55 @@ class Neural(object):
 
         for i in range(0, self.layers-1):
             W_grad = -self.eta * (self.activation[i].reshape(-1,1).dot(self.D[i+1].reshape(1,-1)))
-            self.theta[i] -= W_grad
-            self.theta[i] -= self.eta * self.lamda * self.theta[i]
+            self.theta[i] -= W_grad + self.eta * self.lamda * self.theta[i]
 
     def learn(self):
         self.initActivation()
-        self.currentEstimate = []
 
         for i in range(len(self.X)):
             self.forward(i)
             self.backprop(i)
-        self.loss()
+        self.J.append(self.loss())
+        #self.test()
+        #self.JTest.append(self.loss())
 
     def loss(self):
         weightSquareSum = 0
         for key in self.theta.keys():
             weightSquareSum += np.sum(self.theta[key]*self.theta[key])
         j = (self.lamda / 2) * weightSquareSum
-
         for i in range(len(self.currentEstimate)):
             j += self.cost(self.Y[i], self.currentEstimate[i])
-        self.J.append(j)
+
+        self.currentEstimate = []
         # stuff to examine the flow -----------------------------------------------------------------------------------
         # if the nn is large comment the following
-        '''
+        """
         self.thetaFlow.append(np.array([]))
         for key in self.theta.keys():
             self.thetaFlow[-1] = np.append(self.thetaFlow[-1], self.theta[key].reshape(1, -1))
         self.activationFlow.append(np.array([]))
         for key in self.activation.keys():
             self.activationFlow[-1] = np.append(self.activationFlow[-1], self.activation[key].reshape(1, -1))
-        '''
+        """
         #  --------------------------------------------------------------------------------------------------------------
+
+        return j
+
+    def test(self):
+        for i in range(int(self.datasets*0.3)):
+            self.forward(i)
+
 
     def cost(self, y_i, estimate_i):
         cost = 0
         for j in range(len(estimate_i)):
+            estimate_i[j] = round(estimate_i[j])
             cost += (y_i[j] - estimate_i[j]) ** 2
         return cost * 0.5
         cost = 0
         for j in range(len(estimate_i)):
+
             if abs(estimate_i[j]) < 1e-320:
                 a = -1000
             else:
@@ -175,53 +183,62 @@ def createDataClassification(features, classes, size, scatter):
     for i in range(size):
         x_data.append([])
         c = np.random.randint(0,classes)
-        y_data.append(c)
+        #y_data.append(c)
+        y_data.append([int(c==j) for j in range(classes)])
         for j in range(features):
             x_data[-1].append(centers[c][j] + np.random.normal()*scatter)
     x_data = np.array(x_data)
     y_data = np.array(y_data)
     return x_data, y_data
 
-from sklearn.datasets import fetch_mldata
-import matplotlib.pyplot as plt
-"""
-mnist = fetch_mldata('MNIST original')
-inputX,inputY = np.array([]), np.array([])
-for i in range(500):
-    r = np.random.randint(0,70000)
-    inputX = np.append(inputX, mnist['data'][r])
-    inputY = np.append(inputY, mnist['target'][r])
-inputX=inputX.reshape(-1 , 784)
-inputY=inputY.astype(int)
+if __name__ == "__main__":
 
-totalClasses = max(inputY)-min(inputY)+1
-temp = np.array([])
-for i in range(len(inputY)):
-    temp = np.append(temp, [int(inputY[i] == j) for j in range(totalClasses)])
-temp = temp.reshape(len(inputY),-1)
-inputY = temp
-"""
-inputX, inputY = createData('x*y',['x','y'],1000,0.1)
+    from sklearn.datasets import fetch_mldata
+    import matplotlib.pyplot as plt
 
-nn = Neural([2, 30, 1], 0.1, 0.0001)
-nn.feed(inputX, inputY)
-for i in range(100):
-    nn.learn()
+    print("loading data")
+    mnist = fetch_mldata('MNIST original')
+    inputX,inputY =[], []
+    for i in range(70000):
+        r = np.random.randint(0,70000)
+        inputX.append(mnist['data'][r])
+        inputY.append(mnist['target'][r])
+    inputX = np.array(inputX)
+    inputY = np.array(inputY)
+    inputX=inputX.reshape(-1 , 784)
+    inputY=inputY.astype(int)
+
+    totalClasses = max(inputY)-min(inputY)+1
+    temp = []
+    for i in range(len(inputY)):
+        temp.append([int(inputY[i] == j) for j in range(totalClasses)])
+    temp = np.array(temp)
+    temp = temp.reshape(len(inputY),-1)
+    inputY = temp
+    #inputX, inputY = createData('x*y',['x','y'],1000,10)
+    #inputX, inputY = createDataClassification(10,10,1000,0.1)
+
+    print("creating nn")
+    nn = Neural([784, 30, 10], 0.1, 0.0001)
+    nn.feed(inputX, inputY)
+    for i in range(100):
+        print("iteration", i)
+        nn.learn()
 
 
-nn.forward(nn.datasets-1)
-print(nn.Y[nn.datasets-1], (nn.activation[nn.layers-1]))
-nn.forward(0)
-print(nn.Y[0], (nn.activation[nn.layers-1]))
+    nn.forward(nn.datasets-1)
+    print(nn.Y[nn.datasets-1], (nn.activation[nn.layers-1]))
+    nn.forward(0)
+    print(nn.Y[0], (nn.activation[nn.layers-1]))
 
 
-plt.plot(nn.J)
-plt.ion()
-plt.plot(nn.JTest)
-plt.pause(0.00001)
-plt.ioff()
-plt.figure("theta flow")
-plt.plot(nn.thetaFlow)
-plt.figure("activation flow")
-plt.plot(nn.activationFlow)
-plt.show()
+    plt.plot(nn.J)
+    plt.ion()
+    plt.plot(nn.JTest)
+    plt.pause(0.00001)
+    plt.ioff()
+    plt.figure("theta flow")
+    plt.plot(nn.thetaFlow)
+    plt.figure("activation flow")
+    plt.plot(nn.activationFlow)
+    plt.show()
